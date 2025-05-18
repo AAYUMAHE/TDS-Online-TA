@@ -1,14 +1,20 @@
-# File: api/index.py
 import os
 import json
 import numpy as np
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import openai
 
 app = FastAPI()
+
+# === Mount Static and Templates ===
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 # === Config ===
 PREPROCESSED_JSON = "cleaned_output.json"
@@ -47,13 +53,14 @@ else:
     with open(POST_BANK_JSON, "w", encoding="utf-8") as f:
         json.dump(post_bank, f, indent=2)
 
+# === Core Logic ===
 def semantic_search(query, top_k=TOP_K):
     query_vec = encoder.encode([query], convert_to_numpy=True)
     sims = cosine_similarity(query_vec, embeddings)[0]
     top_indices = sims.argsort()[-top_k:][::-1]
     return [{
-        "response": post_bank[i]["text"],
-        "reference_link": post_bank[i]["url"],
+        "text": post_bank[i]["text"],
+        "url": post_bank[i]["url"],
         "score": float(sims[i])
     } for i in top_indices]
 
@@ -64,7 +71,7 @@ def load_groq_api_key():
     return key
 
 def query_groq_with_context(query, context_responses, groq_api_key):
-    context_prompt = "\n\n".join([f"- {r['response']}" for r in context_responses])
+    context_prompt = "\n\n".join([f"- {r['text']}" for r in context_responses])
     system_prompt = (
         "You are an assistant helping IITM Degree learners. "
         "Use the context below to answer the student's query accurately and don't assume things up.\n\n"
@@ -86,10 +93,36 @@ def query_groq_with_context(query, context_responses, groq_api_key):
 
     return response["choices"][0]["message"]["content"]
 
+# === Web Interface ===
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    return templates.TemplateResponse("chat.html", {"request": request})
+
+@app.post("/ask", response_class=HTMLResponse)
+async def ask_question(request: Request, query: str = Form(...)):
+    query = query.strip()
+    if not query:
+        return templates.TemplateResponse("chat.html", {
+            "request": request,
+            "error": "Please enter a question."
+        })
+
+    top_matches = semantic_search(query)
+    groq_api_key = load_groq_api_key()
+    llm_answer = query_groq_with_context(query, top_matches, groq_api_key)
+
+    return templates.TemplateResponse("chat.html", {
+        "request": request,
+        "query": query,
+        "llm_answer": llm_answer,
+        "references": top_matches
+    })
+
+# === Optional: Keep API POST for programmatic use ===
 class QueryRequest(BaseModel):
     query: str
 
-@app.post("/")
+@app.post("/api")
 def handle_query(request_data: QueryRequest):
     query = request_data.query.strip()
     if not query:
@@ -101,6 +134,6 @@ def handle_query(request_data: QueryRequest):
 
     return {
         "query": query,
-        "llm_answer": llm_answer,
-        "top_references": top_matches
+        "answer": llm_answer,
+        "links": top_matches   #links of top
     }

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IITM Online TA</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        #response-box { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Ask a question to IITM Online TA</h2>
+    <form id="queryForm">
+        <input type="text" id="queryInput" name="query" placeholder="Enter your question" required style="width: 300px;">
+        <button type="submit">Ask</button>
+    </form>
+
+    <div id="response-box" style="display: none;">
+        <h3>Answer:</h3>
+        <p id="answer"></p>
+
+        <h4>Top References:</h4>
+        <ul id="references"></ul>
+    </div>
+
+    <script>
+        document.getElementById("queryForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+
+            const query = document.getElementById("queryInput").value.trim();
+            if (!query) return;
+
+            const responseBox = document.getElementById("response-box");
+            const answerEl = document.getElementById("answer");
+            const referencesEl = document.getElementById("references");
+            responseBox.style.display = "none";
+            answerEl.textContent = "Loading...";
+            referencesEl.innerHTML = "";
+
+            const response = await fetch("/api", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ query: query })
+            });
+
+            const result = await response.json();
+            if (result.error) {
+                answerEl.textContent = result.error;
+            } else {
+                answerEl.textContent = result.answer;
+
+                result.links.forEach(ref => {
+                    const li = document.createElement("li");
+                    li.innerHTML = `<a href="${ref.url}" target="_blank">${ref.text}</a> (Score: ${ref.score.toFixed(2)})`;
+                    referencesEl.appendChild(li);
+                });
+            }
+
+            responseBox.style.display = "block";
+        });
+    </script>
+</body>
+</html>
