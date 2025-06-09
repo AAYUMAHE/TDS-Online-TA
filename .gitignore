@@ -1,5 +1,5 @@
 *.txt
 venv
 !requirements.txt
-!LICENSE.txt
+!MIT LICENSE.txt
 file.yaml
