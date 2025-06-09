@@ -1,3 +1,5 @@
 *.txt
 venv
 !requirements.txt
+!LICENSE.txt
+file.yaml

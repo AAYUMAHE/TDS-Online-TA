@@ -10,9 +10,10 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import openai
 
+# === Init FastAPI App ===
 app = FastAPI()
 
-# === Mount Static and Templates ===
+# === Mount Static Files and Templates ===
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -23,9 +24,10 @@ EMBEDDING_NPY = "post_embeddings.npy"
 MODEL_NAME = "all-MiniLM-L6-v2"
 TOP_K = 10
 
+# === Load Model ===
 encoder = SentenceTransformer(MODEL_NAME)
 
-# === Load data ===
+# === Load or Preprocess Data ===
 if os.path.exists(POST_BANK_JSON) and os.path.exists(EMBEDDING_NPY):
     with open(POST_BANK_JSON, "r", encoding="utf-8") as f:
         post_bank = json.load(f)
@@ -53,7 +55,7 @@ else:
     with open(POST_BANK_JSON, "w", encoding="utf-8") as f:
         json.dump(post_bank, f, indent=2)
 
-# === Core Logic ===
+# === Semantic Search ===
 def semantic_search(query, top_k=TOP_K):
     query_vec = encoder.encode([query], convert_to_numpy=True)
     sims = cosine_similarity(query_vec, embeddings)[0]
@@ -64,12 +66,14 @@ def semantic_search(query, top_k=TOP_K):
         "score": float(sims[i])
     } for i in top_indices]
 
+# === Load Groq API Key ===
 def load_groq_api_key():
     key = os.getenv("GROQ_API_KEY")
     if not key:
         raise Exception("Environment variable 'GROQ_API_KEY' not set.")
     return key
 
+# === Query Groq ===
 def query_groq_with_context(query, context_responses, groq_api_key):
     context_prompt = "\n\n".join([f"- {r['text']}" for r in context_responses])
     system_prompt = (
@@ -93,7 +97,7 @@ def query_groq_with_context(query, context_responses, groq_api_key):
 
     return response["choices"][0]["message"]["content"]
 
-# === Web Interface ===
+# === Web Interface (/ask) ===
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("chat.html", {"request": request})
@@ -118,22 +122,22 @@ async def ask_question(request: Request, query: str = Form(...)):
         "references": top_matches
     })
 
-# === Optional: Keep API POST for programmatic use ===
+# === API Endpoint (/api) ===
 class QueryRequest(BaseModel):
-    query: str
+    question: str
 
 @app.post("/api")
 def handle_query(request_data: QueryRequest):
-    query = request_data.query.strip()
-    if not query:
-        return {"error": "Empty query."}
+    question = request_data.question.strip()
+    if not question:
+        return {"error": "Empty question."}
 
-    top_matches = semantic_search(query)
+    top_matches = semantic_search(question)
     groq_api_key = load_groq_api_key()
-    llm_answer = query_groq_with_context(query, top_matches, groq_api_key)
+    llm_answer = query_groq_with_context(question, top_matches, groq_api_key)
 
     return {
-        "query": query,
+        "question": question,
         "answer": llm_answer,
-        "links": top_matches   #links of top
+        "links": top_matches
     }
