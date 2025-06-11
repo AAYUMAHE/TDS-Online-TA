@@ -52,7 +52,7 @@
 
                 result.links.forEach(ref => {
                     const li = document.createElement("li");
-                    li.innerHTML = `<a href="${ref.url}" target="_blank">${ref.text}</a> (Score: ${ref.score.toFixed(2)})`;
+                    li.innerHTML = `<a href="${ref.url}" target="_blank">${ref.url}</a> (Score: ${ref.score.toFixed(2)})`;
                     referencesEl.appendChild(li);
                 });
             }

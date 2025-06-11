@@ -1,6 +1,7 @@
 import os
 import json
 import numpy as np
+import requests
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-import openai
 
 # === Init FastAPI App ===
 app = FastAPI()
@@ -92,20 +92,28 @@ def query_groq_with_context(query, context_responses, groq_api_key):
         f"Context:\n{context_prompt}\n\nQuery: {query}\nAnswer:"
     )
 
-    openai.api_key = groq_api_key
-    openai.api_base = "https://api.groq.com/openai/v1"
+    headers = {
+        "Authorization": f"Bearer {groq_api_key}",
+        "Content-Type": "application/json"
+    }
 
-    response = openai.ChatCompletion.create(
-        model="llama3-8b-8192",
-        messages=[
+    payload = {
+        "model": "llama3-8b-8192",
+        "messages": [
             {"role": "system", "content": "You are a helpful online TA."},
             {"role": "user", "content": system_prompt}
         ],
-        temperature=0.2,
-        max_tokens=512
-    )
+        "temperature": 0.2,
+        "max_tokens": 512
+    }
 
-    return response["choices"][0]["message"]["content"]
+    response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+    data = response.json()
+
+    if "choices" not in data:
+        raise Exception(f"Groq Error: {data}")
+
+    return data["choices"][0]["message"]["content"]
 
 # === Web Interface (/ask) ===
 @app.get("/", response_class=HTMLResponse)
@@ -138,16 +146,24 @@ class QueryRequest(BaseModel):
 
 @app.post("/api")
 def handle_query(request_data: QueryRequest):
-    question = request_data.question.strip()
-    if not question:
-        return {"error": "Empty question."}
+    try:
+        question = request_data.question.strip()
+        if not question:
+            return {"error": "Empty question."}
 
-    top_matches = semantic_search(question)
-    groq_api_key = load_groq_api_key()
-    llm_answer = query_groq_with_context(question, top_matches, groq_api_key)
+        top_matches = semantic_search(question)
+        groq_api_key = load_groq_api_key()
+        llm_answer = query_groq_with_context(question, top_matches, groq_api_key)
 
-    return {
-        "question": question,
-        "answer": llm_answer,
-        "links": top_matches
-    }
+        return {
+            "question": question,
+            "answer": llm_answer,
+            "links": top_matches
+        }
+
+    except Exception as e:
+        return {
+            "question": request_data.question,
+            "answer": "⚠️ Sorry, an error occurred while generating the answer.",
+            "links": []
+        }
