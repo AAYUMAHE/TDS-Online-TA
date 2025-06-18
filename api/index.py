@@ -32,7 +32,7 @@ PREPROCESSED_JSON = "cleaned_output.json"
 POST_BANK_JSON = "post_bank.json"
 EMBEDDING_NPY = "post_embeddings.npy"
 MODEL_NAME = "all-MiniLM-L6-v2"
-TOP_K = 3
+TOP_K = 5
 
 # === Load Model ===
 encoder = SentenceTransformer(MODEL_NAME)
