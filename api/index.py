@@ -88,7 +88,7 @@ def query_groq_with_context(query, context_responses, groq_api_key):
     context_prompt = "\n\n".join([f"- {r['text']}" for r in context_responses])
     system_prompt = (
         "You are an assistant helping IITM Degree learners. "
-        "Use the context below to answer the student's query accurately and don't assume things up. Make it to the point answer , don't explain too much if not asked\n\n"
+        "Use the context below to answer the student's query accurately and don't assume things up.\n\n"
         f"Context:\n{context_prompt}\n\nQuery: {query}\nAnswer:"
     )
 
